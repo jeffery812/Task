@@ -6,22 +6,10 @@
 import Foundation
 import Observation
 
+/// Each request runs in its own Task; a new request cancels the previous one and starts at once.
 @Observable
-final class LandingPageViewModel {
-    enum State: Equatable {
-        case idle
-        case loading(requestID: Int)
-        case loaded(requestID: Int, FetchResult)
-        case failed(requestID: Int, message: String)
-    }
-
-    struct LogEntry: Identifiable {
-        let id = UUID()
-        let date = Date()
-        let message: String
-    }
-
-    private(set) var state: State = .idle
+final class LandingPageViewModel: TaskDemoModel {
+    private(set) var state: LoadState = .idle
     private(set) var log: [LogEntry] = []
 
     /// The only running task. Starting a new one always cancels this one first.
@@ -81,7 +69,7 @@ final class LandingPageViewModel {
 
     /// Only called by the task that is still current, so clearing `currentTask` here is safe.
     /// Task does not reset this reference by itself when it completes.
-    private func finish(state newState: State, message: String) {
+    private func finish(state newState: LoadState, message: String) {
         state = newState
         currentTask = nil
         append(message)

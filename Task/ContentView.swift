@@ -8,89 +8,40 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var viewModel = LandingPageViewModel()
-
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    controls
-                } footer: {
-                    Text("Each request waits 2 s before calling the API. Tap \"Fetch\" repeatedly: older tasks are cancelled and only the newest one shows its result.")
+        TabView {
+            Tab("Cancel Previous", systemImage: "arrow.uturn.backward.circle") {
+                TaskDemoView(
+                    title: "Cancel Previous",
+                    summary: "Each request waits 2 s before calling the API. Tap \"Fetch\" repeatedly: the previous task is cancelled and the new one starts at once, so a cancelled task may briefly overlap the new one.",
+                    model: LandingPageViewModel()
+                ) { model in
+                    model.load()
                 }
-
-                Section("Result") {
-                    result
-                }
-
-                Section {
-                    ForEach(viewModel.log) { entry in
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(entry.date, format: .dateTime.hour().minute().second())
-                                .foregroundStyle(.secondary)
-                            Text(entry.message)
-                        }
-                        .font(.caption.monospaced())
-                    }
-                } header: {
-                    HStack {
-                        Text("Task log")
-                        Spacer()
-                        Button("Clear", action: viewModel.clearLog)
-                            .font(.caption)
+            }
+            Tab("Serial Latest", systemImage: "list.number") {
+                TaskDemoView(
+                    title: "Serial Latest",
+                    summary: "Requests run on a background thread, one at a time. A new request cancels the running one and waits for it to stop before starting; requests replaced while waiting never run.",
+                    model: SerialLandingPageViewModel()
+                ) { model in
+                    Task {
+                        // Awaits the result; throws CancellationError when a newer load() replaces it.
+                        _ = try? await model.load()
                     }
                 }
             }
-            .navigationTitle("Single Task Demo")
-        }
-    }
-
-    private var controls: some View {
-        HStack {
-            Button("Fetch", systemImage: "arrow.down.circle", action: viewModel.load)
-            Spacer()
-            Button("Fetch ×5", systemImage: "bolt") {
-                for _ in 0..<5 { viewModel.load() }
-            }
-            Spacer()
-            Button("Cancel", systemImage: "xmark.circle", role: .destructive, action: viewModel.cancel)
-        }
-        .buttonStyle(.borderless)
-    }
-
-    @ViewBuilder
-    private var result: some View {
-        switch viewModel.state {
-        case .idle:
-            Text("Tap Fetch to start.")
-                .foregroundStyle(.secondary)
-        case .loading(let requestID):
-            HStack {
-                ProgressView()
-                Text("Request #\(requestID) running…")
-            }
-        case .loaded(let requestID, let result):
-            Text("Request #\(requestID) · HTTP \(result.statusCode) · \(result.byteCount.formatted(.byteCount(style: .file)))")
-                .font(.headline)
-                .foregroundStyle((200..<300).contains(result.statusCode) ? .green : .orange)
-            ForEach(result.widgets) { widget in
-                LabeledContent {
-                    Text("\(widget.itemCount) items")
-                } label: {
-                    Text(widget.name)
-                    Text(widget.type)
+            Tab("Async Latest", systemImage: "bolt.circle") {
+                TaskDemoView(
+                    title: "Async Latest",
+                    summary: "load() is async and returns the result. A new request cancels the previous one and starts at once without waiting for it; only the newest caller gets a value, the others get CancellationError.",
+                    model: AsyncLatestLandingPageViewModel()
+                ) { model in
+                    Task {
+                        _ = try? await model.load()
+                    }
                 }
             }
-            DisclosureGroup("Raw JSON (first 4,000 chars)") {
-                ScrollView(.horizontal) {
-                    Text(result.preview)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                }
-            }
-        case .failed(let requestID, let message):
-            Label("Request #\(requestID) failed: \(message)", systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.red)
         }
     }
 }

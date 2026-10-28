@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task · Swift Concurrency 取消策略演示</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=JetBrains+Mono:wght@400;600&family=Noto+Serif+SC:wght@400;600;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f2ede2;
+    --paper-2: #e9e2d2;
+    --ink: #17150f;
+    --ink-soft: #5b564a;
+    --rule: #cfc6b2;
+    --cut: #d9381e;
+    --ok: #1f7a5a;
+    --wait: #b98a1b;
+    --code-bg: #1c1a15;
+    --code-ink: #efe7d4;
+    --serif: "Noto Serif SC", "Songti SC", serif;
+    --display: "Fraunces", "Noto Serif SC", serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 17px/1.8 var(--serif);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* paper grain */
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 100; opacity: .35;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.05 0 0 0 .18 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
+  }
+  a { color: inherit; text-decoration-color: var(--cut); text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .84em; background: var(--paper-2); padding: .08em .35em; border-radius: 3px; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 32px; }
+
+  /* ── masthead ───────────────────────────── */
+  header.mast {
+    border-bottom: 2px solid var(--ink);
+    padding: 22px 0 10px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    font: 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft);
+  }
+  header.mast b { color: var(--ink); }
+
+  .hero { padding: 72px 0 56px; display: grid; grid-template-columns: 1.35fr 1fr; gap: 56px; align-items: end; border-bottom: 1px solid var(--rule); }
+  .hero h1 {
+    font-family: var(--display); font-weight: 900; font-variation-settings: "SOFT" 30, "opsz" 144;
+    font-size: clamp(64px, 11vw, 148px); line-height: .86; letter-spacing: -.04em; margin: 0;
+  }
+  .hero h1 .strike { position: relative; color: var(--ink-soft); font-weight: 300; font-style: italic; }
+  .hero h1 .strike::after {
+    content: ""; position: absolute; left: -4%; right: -4%; top: 54%; height: .09em; background: var(--cut);
+    transform: rotate(-4deg) scaleX(0); transform-origin: left; animation: slash .7s .9s cubic-bezier(.7,0,.2,1) forwards;
+  }
+  @keyframes slash { to { transform: rotate(-4deg) scaleX(1); } }
+  .hero .zh { font: 900 clamp(26px, 3.2vw, 38px)/1.3 var(--serif); margin: 22px 0 0; }
+  .hero .lede { color: var(--ink-soft); margin: 0; font-size: 16px; }
+  .hero .lede strong { color: var(--ink); }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 22px; }
+  .meta span { font: 12px/1 var(--mono); border: 1px solid var(--ink); padding: 7px 10px; border-radius: 99px; }
+
+  /* ── section heads ──────────────────────── */
+  section { padding: 72px 0 24px; }
+  .sh { display: grid; grid-template-columns: 90px 1fr; gap: 24px; align-items: baseline; margin-bottom: 36px; }
+  .sh .no { font: italic 300 64px/1 var(--display); color: var(--cut); }
+  .sh h2 { font: 900 34px/1.2 var(--serif); margin: 0; }
+  .sh p { grid-column: 2; margin: 6px 0 0; color: var(--ink-soft); }
+
+  /* ── strategy cards ─────────────────────── */
+  .duo { display: grid; grid-template-columns: repeat(3, 1fr); border: 2px solid var(--ink); }
+  .duo > article { padding: 34px 34px 30px; }
+  .duo > article + article { border-left: 2px solid var(--ink); }
+  .duo > article:nth-child(2) { background: var(--paper-2); }
+  .duo .tag { font: 600 12px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--cut); }
+  .duo h3 { font: 700 36px/1.05 var(--display); letter-spacing: -.02em; margin: 10px 0 4px; }
+  .duo .file { font: 13px var(--mono); color: var(--ink-soft); }
+  .duo ul { padding-left: 1.1em; margin: 18px 0 0; }
+  .duo li { margin: 6px 0; }
+  .duo li::marker { content: "→  "; color: var(--cut); font-family: var(--mono); }
+
+  /* ── timelines ──────────────────────────── */
+  .tl { border-top: 2px solid var(--ink); padding: 26px 0 8px; margin-top: 40px; }
+  .tl h4 { font: 700 22px/1 var(--display); margin: 0 0 4px; }
+  .tl .cap { color: var(--ink-soft); font-size: 15px; margin: 0 0 20px; }
+  .lanes { position: relative; padding-left: 64px; }
+  .lane { position: relative; height: 34px; border-bottom: 1px dashed var(--rule); }
+  .lane .id { position: absolute; left: -64px; top: 7px; font: 600 13px var(--mono); }
+  .bar {
+    position: absolute; top: 9px; height: 16px; border-radius: 2px;
+    transform-origin: left; transform: scaleX(0); animation: grow .6s cubic-bezier(.3,.7,.2,1) forwards;
+  }
+  .lanes.in .bar { animation-play-state: running; }
+  @keyframes grow { to { transform: scaleX(1); } }
+  .bar.run  { background: var(--ink); }
+  .bar.tail { background: repeating-linear-gradient(-45deg, var(--ink) 0 3px, transparent 3px 6px); border: 1px solid var(--ink); }
+  .bar.wait { background: repeating-linear-gradient(90deg, var(--wait) 0 6px, transparent 6px 10px); height: 4px; top: 15px; }
+  .bar.ok   { background: var(--ok); }
+  .mark { position: absolute; top: 4px; font: 700 18px/1 var(--mono); opacity: 0; animation: pop .3s forwards; }
+  .mark.x { color: var(--cut); } .mark.v { color: var(--ok); }
+  @keyframes pop { from { opacity: 0; transform: scale(2); } to { opacity: 1; transform: scale(1); } }
+  .note { position: absolute; top: 8px; font: 12px var(--mono); color: var(--ink-soft); white-space: nowrap; opacity: 0; animation: pop .3s forwards; }
+  .axis { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--ink-soft); padding: 6px 0 0 64px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 20px; font: 12px var(--mono); color: var(--ink-soft); margin-top: 16px; }
+  .legend i { display: inline-block; width: 22px; height: 10px; vertical-align: -1px; margin-right: 6px; }
+
+  /* ── code ───────────────────────────────── */
+  pre {
+    margin: 0; background: var(--code-bg); color: var(--code-ink); padding: 22px 24px; overflow-x: auto;
+    font: 13px/1.7 var(--mono); border-radius: 0; box-shadow: 8px 8px 0 var(--cut);
+  }
+  pre .c { color: #8d8571; font-style: italic; }
+  pre .k { color: #f0a46b; }
+  pre .t { color: #9fd3b8; }
+  pre .h { background: rgba(217,56,30,.28); outline: 1px solid rgba(217,56,30,.6); }
+
+  .lessons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; border-top: 2px solid var(--ink); }
+  .lesson { padding: 28px 28px 30px 0; border-bottom: 1px solid var(--rule); display: grid; grid-template-columns: 52px 1fr; gap: 6px 14px; }
+  .lesson:nth-child(even) { padding-left: 28px; border-left: 1px solid var(--rule); }
+  .lesson .n { font: italic 300 40px/1 var(--display); color: var(--cut); grid-row: span 2; }
+  .lesson h3 { margin: 0; font: 700 19px/1.4 var(--serif); }
+  .lesson p { margin: 0; font-size: 15.5px; color: var(--ink-soft); }
+  .lesson p code { color: var(--ink); }
+
+  .snip { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 8px; }
+  .snip figcaption { font: 600 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+
+  /* ── tables ─────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
+  th { text-align: left; font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); padding: 0 12px 10px 0; border-bottom: 2px solid var(--ink); }
+  td { padding: 14px 12px 14px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td:first-child { font: 600 13px var(--mono); white-space: nowrap; }
+  td .new { font: 600 10px var(--mono); color: var(--paper); background: var(--cut); padding: 2px 5px; margin-left: 6px; vertical-align: 1px; }
+
+  .run-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: start; }
+  .run-grid ol { margin: 0; padding-left: 1.3em; }
+  .run-grid li { margin: 8px 0; }
+
+  footer { margin-top: 96px; border-top: 2px solid var(--ink); padding: 18px 0 48px; display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--ink-soft); }
+
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .8s, transform .8s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 860px) {
+    .hero, .duo, .snip, .lessons, .run-grid { grid-template-columns: 1fr; }
+    .duo > article + article { border-left: 0; border-top: 2px solid var(--ink); }
+    .lesson:nth-child(even) { padding-left: 0; border-left: 0; }
+    .sh { grid-template-columns: 1fr; } .sh p { grid-column: 1; }
+    .note { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0s !important; animation-delay: 0s !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <span><b>README</b> · Task.xcodeproj</span>
+    <span>SwiftUI · Swift Concurrency · iOS 26</span>
+  </header>
+
+  <div class="hero">
+    <div>
+      <h1>Task<br><span class="strike">cancel()</span></h1>
+      <p class="zh">用一个真实网络请求，看清 Swift Task 的取消到底是怎么回事。</p>
+    </div>
+    <div>
+      <p class="lede">
+        一个 SwiftUI 小应用，用三个 Tab 演示三种<strong>“只保留最新请求”</strong>的写法。每次请求先人为等待 <strong>2 秒</strong>，再去拉取一份约 500 KB 的 Landing Page JSON，
+        让你有足够时间连点 <code>Fetch</code>、<code>Fetch ×5</code>、<code>Cancel</code>，在实时日志里观察任务何时被取消、何时真正停下。
+      </p>
+      <div class="meta">
+        <span>@Observable</span><span>@concurrent</span><span>withTaskCancellationHandler</span><span>Swift Testing</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 01 ─────────────────────────────────── -->
+  <section class="reveal">
+    <div class="sh">
+      <span class="no">01</span>
+      <h2>三种策略</h2>
+      <p>同一个界面 <code>TaskDemoView</code>，同一个服务 <code>LandingPageService</code>，只换 ViewModel。</p>
+    </div>
+
+    <div class="duo">
+      <article>
+        <span class="tag">Tab 1</span>
+        <h3>Cancel Previous</h3>
+        <div class="file">LandingPageViewModel.swift · load() -&gt; Void</div>
+        <ul>
+          <li>新请求到来：<code>cancel()</code> 旧 Task，<strong>立即</strong>启动新 Task。</li>
+          <li>取消是协作式的，被取消的旧任务可能还要跑一小会儿，与新任务<strong>短暂重叠</strong>。</li>
+          <li>旧任务即使拿到了结果或错误，也不允许覆盖 <code>state</code> / <code>currentTask</code>。</li>
+          <li>调用方“发出即忘”，结果通过 <code>@Observable</code> 的 <code>state</code> 驱动 UI。</li>
+        </ul>
+      </article>
+      <article>
+        <span class="tag">Tab 2</span>
+        <h3>Serial Latest</h3>
+        <div class="file">SerialLandingPageViewModel.swift · load() async throws -&gt; FetchResult</div>
+        <ul>
+          <li>工作在后台线程执行（<code>Task { @concurrent in … }</code>），<strong>严格一个接一个</strong>。</li>
+          <li>新请求取消旧请求后，<strong>等旧请求真正结束</strong>再开始，绝不并发。</li>
+          <li>排队期间就被更新请求替换的请求<strong>永远不会执行</strong>。</li>
+          <li>调用方直接 <code>await</code> 结果；被替换时抛 <code>CancellationError</code>，取消调用方也会取消工作。</li>
+        </ul>
+      </article>
+      <article>
+        <span class="tag">Tab 3</span>
+        <h3>Async Latest</h3>
+        <div class="file">AsyncLatestLandingPageViewModel.swift · load() async throws -&gt; FetchResult</div>
+        <ul>
+          <li>像 Tab 1 一样：取消旧请求后<strong>立即</strong>开始，不等旧请求停下。</li>
+          <li>像 Tab 2 一样：调用方 <code>await</code> 结果，工作在后台线程执行。</li>
+          <li>只有最新的调用方拿到值，被替换的调用方抛 <code>CancellationError</code>。</li>
+          <li>用 <code>currentTask == task</code> 判断自己是否仍是当前请求，决定是否回到 <code>.idle</code>。</li>
+        </ul>
+      </article>
+    </div>
+  </section>
+
+  <!-- 02 ─────────────────────────────────── -->
+  <section>
+    <div class="sh reveal">
+      <span class="no">02</span>
+      <h2>按下 Fetch ×5 之后</h2>
+      <p>同一瞬间发出 #1–#5，两种策略的时间线完全不同。</p>
+    </div>
+
+    <div class="tl reveal">
+      <h4>Cancel Previous</h4>
+      <p class="cap">每个请求都立即启动，下一个到来时被取消；被取消的任务会在下一个挂起点（<code>Task.sleep</code>）抛错退出。只有 #5 走完 2 秒等待和网络请求。</p>
+      <div class="lanes" data-lanes>
+        <div class="lane"><span class="id">#1</span><div class="bar tail" style="left:0;width:4%;animation-delay:.1s"></div><span class="mark x" style="left:4.5%;animation-delay:.5s">✕</span></div>
+        <div class="lane"><span class="id">#2</span><div class="bar tail" style="left:1%;width:4%;animation-delay:.2s"></div><span class="mark x" style="left:5.5%;animation-delay:.6s">✕</span></div>
+        <div class="lane"><span class="id">#3</span><div class="bar tail" style="left:2%;width:4%;animation-delay:.3s"></div><span class="mark x" style="left:6.5%;animation-delay:.7s">✕</span></div>
+        <div class="lane"><span class="id">#4</span><div class="bar tail" style="left:3%;width:4%;animation-delay:.4s"></div><span class="mark x" style="left:7.5%;animation-delay:.8s">✕</span><span class="note" style="left:12%;animation-delay:1s">← 已取消的任务与新任务短暂重叠</span></div>
+        <div class="lane"><span class="id">#5</span><div class="bar run" style="left:4%;width:60%;animation-delay:.6s;animation-duration:1.2s"></div><div class="bar ok" style="left:64%;width:22%;animation-delay:1.8s"></div><span class="mark v" style="left:87%;animation-delay:2.4s">✓</span></div>
+      </div>
+      <div class="axis"><span>0 s</span><span>sleep 2 s</span><span>URLSession</span><span>finished</span></div>
+    </div>
+
+    <div class="tl reveal">
+      <h4>Serial Latest</h4>
+      <p class="cap">#1 先跑起来；#2–#5 每个都取消前一个并 <code>await previous?.result</code> 形成链条。#2–#4 在等待后 <code>checkCancellation()</code> 直接退出，从未执行；#5 等 #1 真正停下后才开始。</p>
+      <div class="lanes" data-lanes>
+        <div class="lane"><span class="id">#1</span><div class="bar run" style="left:0;width:6%;animation-delay:.1s"></div><div class="bar tail" style="left:6%;width:14%;animation-delay:.5s"></div><span class="mark x" style="left:20.5%;animation-delay:1s">✕</span><span class="note" style="left:25%;animation-delay:1.1s">← 收到 cancel，但工作还在收尾</span></div>
+        <div class="lane"><span class="id">#2</span><div class="bar wait" style="left:1%;width:19%;animation-delay:.2s"></div><span class="mark x" style="left:20.5%;animation-delay:1.1s">✕</span></div>
+        <div class="lane"><span class="id">#3</span><div class="bar wait" style="left:2%;width:18%;animation-delay:.3s"></div><span class="mark x" style="left:20.5%;animation-delay:1.2s">✕</span></div>
+        <div class="lane"><span class="id">#4</span><div class="bar wait" style="left:3%;width:17%;animation-delay:.4s"></div><span class="mark x" style="left:20.5%;animation-delay:1.3s">✕</span><span class="note" style="left:25%;animation-delay:1.4s">← 排队时就被替换，fetch 从未调用</span></div>
+        <div class="lane"><span class="id">#5</span><div class="bar wait" style="left:4%;width:17%;animation-delay:.5s"></div><div class="bar run" style="left:21%;width:52%;animation-delay:1.4s;animation-duration:1.2s"></div><div class="bar ok" style="left:73%;width:20%;animation-delay:2.6s"></div><span class="mark v" style="left:94%;animation-delay:3.2s">✓</span></div>
+      </div>
+      <div class="axis"><span>0 s</span><span>#1 停止</span><span>#5 sleep 2 s</span><span>finished</span></div>
+      <div class="legend">
+        <span><i style="background:var(--ink)"></i>运行中</span>
+        <span><i style="background:repeating-linear-gradient(-45deg,var(--ink) 0 3px,transparent 3px 6px);border:1px solid var(--ink)"></i>已取消、仍在收尾</span>
+        <span><i style="background:repeating-linear-gradient(90deg,var(--wait) 0 6px,transparent 6px 10px);height:4px"></i>等待前一个请求结束</span>
+        <span><i style="background:var(--ok)"></i>网络请求 / 解析</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 ─────────────────────────────────── -->
+  <section>
+    <div class="sh reveal">
+      <span class="no">03</span>
+      <h2>代码里值得注意的八个点</h2>
+      <p>每一条都在源码注释里有对应说明，并大多有单元测试覆盖。</p>
+    </div>
+
+    <div class="lessons reveal">
+      <div class="lesson"><span class="n">i</span><h3>取消是协作式的</h3>
+        <p><code>Task.sleep</code> 被取消时立刻抛 <code>CancellationError</code>；<code>URLSession.data(for:)</code> 抛 <code>URLError(.cancelled)</code>；CPU 密集的解析需要自己 <code>try Task.checkCancellation()</code>。</p></div>
+      <div class="lesson"><span class="n">ii</span><h3>过期结果不能覆盖新状态</h3>
+        <p>fetch 可能在 <code>cancel()</code> 之后才返回。Cancel Previous 在写 <code>state</code> 前再检查一次取消；测试 <code>staleResultDoesNotOverwriteNewerTask</code> 覆盖。</p></div>
+      <div class="lesson"><span class="n">iii</span><h3>被取消的任务也可能报别的错</h3>
+        <p>比如取消后才到的超时。只要 <code>Task.isCancelled</code>，就按“已取消”处理，不碰 <code>currentTask</code>，否则会清掉新任务的引用（<code>staleErrorDoesNotClearNewerTask</code>）。</p></div>
+      <div class="lesson"><span class="n">iv</span><h3>Task 不会自己置空引用</h3>
+        <p>完成后 <code>currentTask</code> 依旧指向它。只有“仍是当前任务”的那一个才在 <code>finish(...)</code> 里把它设为 <code>nil</code>。</p></div>
+      <div class="lesson"><span class="n">v</span><h3><code>@concurrent</code> 让工作离开主线程</h3>
+        <p>开启 Approachable Concurrency 后，普通 <code>nonisolated async</code> 函数跑在调用者的 actor 上。<code>LandingPageService.fetch()</code> 与 Serial 的 Task 都标了 <code>@concurrent</code>，避免 500 KB JSON 解析卡住主线程。</p></div>
+      <div class="lesson"><span class="n">vi</span><h3><code>task.value</code> 不转发取消</h3>
+        <p>等待非结构化 Task 的结果时，调用方被取消并不会取消它。Serial 用 <code>withTaskCancellationHandler { … } onCancel: { task.cancel() }</code> 手动转发。</p></div>
+      <div class="lesson"><span class="n">vii</span><h3>actor 重入</h3>
+        <p><code>load()</code> 在 <code>await</code> 处挂起时，别的 <code>load()</code> 可能已经开始。回到主 actor 后用 <code>guard !task.isCancelled</code> 判断自己是否已被替换，<code>reentrantLoadsKeepLatestState</code> 验证。</p></div>
+      <div class="lesson"><span class="n">viii</span><h3>别让 <code>.loading</code> 卡住</h3>
+        <p>被取消的若是最新请求（没人接替），就把 <code>state</code> 回到 <code>.idle</code>；用户 <code>cancel()</code> 时保留 <code>currentTask</code>，好让下一次请求仍然等它停下。</p></div>
+    </div>
+  </section>
+
+  <!-- 04 ─────────────────────────────────── -->
+  <section>
+    <div class="sh reveal">
+      <span class="no">04</span>
+      <h2>核心代码</h2>
+      <p>两种 <code>load()</code> 的骨架，高亮处是策略的关键差异。</p>
+    </div>
+    <div class="snip reveal">
+      <figure style="margin:0">
+        <figcaption>Cancel Previous</figcaption>
+<pre><span class="k">func</span> load() {
+    currentTask?.cancel()
+    <span class="k">let</span> requestID = nextRequestID; nextRequestID += 1
+    state = .loading(requestID: requestID)
+
+    currentTask = <span class="t">Task</span> { [<span class="k">weak self</span>, fetch] <span class="k">in</span>
+        <span class="k">do</span> {
+            <span class="k">let</span> result = <span class="k">try await</span> fetch()
+            <span class="c">// 旧任务可能在 cancel() 之后才拿到结果</span>
+            <span class="h"><span class="k">try</span> Task.checkCancellation()</span>
+            self?.finish(state: .loaded(…))
+        } <span class="k">catch</span> {
+            <span class="h"><span class="k">if</span> Task.isCancelled || isCancellation(error)</span> {
+                self?.append(<span class="t">"#\(requestID) cancelled"</span>)
+            } <span class="k">else</span> {
+                self?.finish(state: .failed(…))
+            }
+        }
+    }
+}</pre>
+      </figure>
+      <figure style="margin:0">
+        <figcaption>Serial Latest</figcaption>
+<pre><span class="k">func</span> load() <span class="k">async throws</span> -&gt; FetchResult {
+    <span class="k">let</span> previous = currentTask
+    previous?.cancel()
+
+    <span class="k">let</span> task = <span class="t">Task</span> { <span class="h">@concurrent</span> [<span class="k">weak self</span>, fetch] <span class="k">in</span>
+        <span class="h">_ = <span class="k">await</span> previous?.result</span>   <span class="c">// 等它真正结束</span>
+        <span class="k">try</span> Task.checkCancellation()   <span class="c">// 排队时被替换</span>
+        <span class="k">return try await</span> fetch()
+    }
+    currentTask = task
+
+    <span class="k">let</span> value = <span class="k">try await</span> <span class="h">withTaskCancellationHandler</span> {
+        <span class="k">try await</span> task.value
+    } onCancel: { task.cancel() }
+
+    <span class="c">// 重入：挂起期间可能已被更新的 load() 替换</span>
+    <span class="k">guard</span> !task.isCancelled <span class="k">else</span> { <span class="k">throw</span> CancellationError() }
+    state = .loaded(requestID: requestID, value)
+    <span class="k">return</span> value
+}</pre>
+      </figure>
+    </div>
+  </section>
+
+  <!-- 05 ─────────────────────────────────── -->
+  <section>
+    <div class="sh reveal">
+      <span class="no">05</span>
+      <h2>项目结构</h2>
+    </div>
+    <table class="reveal">
+      <thead><tr><th>文件</th><th>职责</th></tr></thead>
+      <tbody>
+        <tr><td>TaskApp.swift</td><td>App 入口，展示 <code>ContentView</code>。</td></tr>
+        <tr><td>ContentView.swift</td><td><code>TabView</code> 三个 Tab，分别注入三种 ViewModel 与对应的 <code>load</code> 闭包。Tab 2、3 用 <code>Task { _ = try? await model.load() }</code> 包一层。</td></tr>
+        <tr><td>TaskDemoView.swift<span class="new">NEW</span></td><td>泛型共享界面：<em>Fetch / Fetch ×5 / Cancel</em> 三个按钮、结果区（HTTP 状态、字节数、widget 列表、前 4000 字符 JSON）、带毫秒时间戳的任务日志。</td></tr>
+        <tr><td>TaskDemoModel.swift<span class="new">NEW</span></td><td><code>LoadState</code>、<code>LogEntry</code>、<code>TaskDemoModel</code> 协议（不含 <code>load</code>，因两者签名不同），以及 <code>isOnMainThread()</code>。</td></tr>
+        <tr><td>LandingPageService.swift</td><td><code>nonisolated</code> 的 <code>Sendable</code> 服务：2 秒延迟 → 带 locale / jurisdiction / Brand 请求头的 GET → 解析 <code>view.widgets[]</code>，结果为 <code>FetchResult</code>。</td></tr>
+        <tr><td>LandingPageViewModel.swift</td><td>Cancel Previous 策略。</td></tr>
+        <tr><td>SerialLandingPageViewModel.swift<span class="new">NEW</span></td><td>Serial Latest 策略。</td></tr>
+        <tr><td>AsyncLatestLandingPageViewModel.swift<span class="new">NEW</span></td><td>Async Latest 策略：async 版的 Cancel Previous。</td></tr>
+        <tr><td>TaskTests/TaskTests.swift</td><td>Swift Testing 单元测试，注入 stub <code>fetch</code> 闭包，不访问网络。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 06 ─────────────────────────────────── -->
+  <section>
+    <div class="sh reveal">
+      <span class="no">06</span>
+      <h2>测试覆盖</h2>
+      <p>ViewModel 通过 <code>init(fetch:)</code> 注入假的请求，测试可以精确控制耗时、是否响应取消、抛什么错。</p>
+    </div>
+    <table class="reveal">
+      <thead><tr><th>测试</th><th>验证内容</th></tr></thead>
+      <tbody>
+        <tr><td>newLoadCancelsPreviousTask</td><td>连续 3 次 <code>load()</code>，只有 #3 完成，#1、#2 被取消。</td></tr>
+        <tr><td>staleResultDoesNotOverwriteNewerTask</td><td>忽略取消的 fetch 仍返回结果，也不能覆盖 #2 的状态。</td></tr>
+        <tr><td>staleErrorDoesNotClearNewerTask</td><td>被取消后抛 <code>URLError(.timedOut)</code> 的旧任务不会清掉新任务，<code>cancel()</code> 仍能作用于 #2。</td></tr>
+        <tr><td>cancelStopsRunningTask</td><td>用户 <code>cancel()</code> 后任务停止，状态回到 <code>.idle</code>。</td></tr>
+        <tr><td>serialRequestsRunOneAtATimeOffMainThread</td><td>5 次请求只执行 #1 和 #5，最大并发为 1，且不在主线程；#2–#4 抛 <code>CancellationError</code>。</td></tr>
+        <tr><td>cancellingCallerCancelsSerialRequest</td><td>取消调用方 Task 会取消工作本身，状态不会卡在 <code>.loading</code>。</td></tr>
+        <tr><td>reentrantLoadsKeepLatestState</td><td>#1 在挂起中被 #2 替换后恢复，不能改动 #2 的状态。</td></tr>
+        <tr><td>serialFailureIsThrownToCaller</td><td>网络错误抛给调用方，状态为 <code>.failed</code>。</td></tr>
+        <tr><td>asyncLatestStartsAtOnceAndReturnsOnlyLatest</td><td>#2 不等 #1 停下就开始（最大并发 2），只有 #2 返回值，#1 抛 <code>CancellationError</code>。</td></tr>
+        <tr><td>asyncLatestStaleResultDoesNotOverwriteNewerState</td><td>忽略取消的旧请求返回值后，不能覆盖 #2 的状态。</td></tr>
+        <tr><td>cancellingCallerCancelsAsyncLatestRequest</td><td>取消调用方会取消请求，状态回到 <code>.idle</code>，且不再被当作“当前请求”。</td></tr>
+        <tr><td>userCancelStopsAsyncLatestRequest</td><td>用户 <code>cancel()</code> 后调用方收到 <code>CancellationError</code>。</td></tr>
+        <tr><td>asyncLatestFailureIsThrownToCaller</td><td>网络错误抛给调用方，状态为 <code>.failed</code>。</td></tr>
+        <tr><td>parsesWidgets</td><td><code>LandingPageService.widgets(in:)</code> 正确提取 widget 及条目数。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 07 ─────────────────────────────────── -->
+  <section>
+    <div class="sh reveal">
+      <span class="no">07</span>
+      <h2>运行</h2>
+    </div>
+    <div class="run-grid reveal">
+      <ol>
+        <li>用支持 iOS 26 SDK 的 Xcode 打开 <code>Task.xcodeproj</code>。</li>
+        <li>选择 <code>Task</code> scheme 和一个 iOS 26 模拟器，<kbd>⌘R</kbd> 运行。</li>
+        <li>在任一 Tab 中连点 <em>Fetch</em> 或点 <em>Fetch ×5</em>，对照日志观察取消顺序；点 <em>Cancel</em> 手动取消。</li>
+        <li><kbd>⌘U</kbd> 运行测试，或使用下方命令行。</li>
+      </ol>
+<pre>xcodebuild test \
+  -project Task.xcodeproj \
+  -scheme Task \
+  -destination <span class="t">'platform=iOS Simulator,name=iPhone 17 Pro'</span></pre>
+    </div>
+    <p class="reveal" style="color:var(--ink-soft);font-size:15px;margin-top:28px">
+      构建设置：<code>IPHONEOS_DEPLOYMENT_TARGET = 26.0</code>、<code>SWIFT_APPROACHABLE_CONCURRENCY = YES</code>，目标默认隔离为 MainActor。
+      运行时需要联网访问 <code>sportsbff-ams.kindredext.net</code>；单元测试不需要网络。模拟器名称请按本机实际可用的设备替换。
+    </p>
+  </section>
+
+  <footer>
+    <span>Task — Swift Concurrency cancellation demo</span>
+    <span>© 2026 Zhihui Tang</span>
+  </footer>
+</div>
+
+<script>
+  // Reveal sections and replay timeline animations when they scroll into view.
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('in');
+      e.target.querySelectorAll('[data-lanes] .bar, [data-lanes] .mark, [data-lanes] .note').forEach(el => {
+        el.style.animationName = 'none'; void el.offsetWidth; el.style.animationName = '';
+      });
+      io.unobserve(e.target);
+    }
+  }, { threshold: 0.2 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>
