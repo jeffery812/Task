@@ -2,6 +2,8 @@
 
 一个用来**看清 Swift Concurrency 中 `Task` 取消机制**的 SwiftUI 演示项目。
 
+📖 在线文档：<https://jeffery812.github.io/Task/>
+
 ## 为什么做这个项目
 
 “用户连续触发同一个请求，只保留最新的结果”是 App 里非常常见的需求：搜索框输入、下拉刷新、切换筛选条件、反复点击加载按钮……
@@ -32,10 +34,12 @@
 
 ## 文档
 
-- [`index.html`](index.html)：项目详解。三种策略的时间线动画、核心代码、项目结构、测试清单。
-- [`TaskGuide.html`](TaskGuide.html)：Task 用法手册。结构化 vs 非结构化、`Task { @concurrent }`、取消、启动时机、常见坑、本项目调用链，以及 10 道面试自测题。
+文档通过 GitHub Pages 发布，可以直接在线阅读：
 
-两个页面都是单文件 HTML，直接用浏览器打开即可（字体来自 Google Fonts，需要联网）。
+- [项目详解](https://jeffery812.github.io/Task/)（[`index.html`](index.html)）：三种策略的时间线动画、核心代码、项目结构、测试清单。
+- [Task 用法手册](https://jeffery812.github.io/Task/TaskGuide.html)（[`TaskGuide.html`](TaskGuide.html)）：结构化 vs 非结构化、`Task { @concurrent }`、取消、启动时机、常见坑、本项目调用链，以及 10 道面试自测题。
+
+两个页面都是单文件 HTML，也可以克隆后直接用浏览器打开（字体来自 Google Fonts，需要联网）。
 
 ## 运行
 
