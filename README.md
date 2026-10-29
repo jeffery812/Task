@@ -36,8 +36,8 @@
 
 文档通过 GitHub Pages 发布，可以直接在线阅读：
 
-- [项目详解](https://jeffery812.github.io/Task/)（[`index.html`](index.html)）：三种策略的时间线动画、核心代码、项目结构、测试清单。
-- [Task 用法手册](https://jeffery812.github.io/Task/TaskGuide.html)（[`TaskGuide.html`](TaskGuide.html)）：结构化 vs 非结构化、`Task { @concurrent }`、取消、启动时机、常见坑、本项目调用链，以及 10 道面试自测题。
+- [项目详解](https://jeffery812.github.io/Task/)：三种策略的时间线动画、核心代码、项目结构、测试清单。
+- [Task 用法手册](https://jeffery812.github.io/Task/TaskGuide.html)：结构化 vs 非结构化、`Task { @concurrent }`、取消、启动时机、常见坑、本项目调用链，以及 10 道面试自测题。
 
 两个页面都是单文件 HTML，也可以克隆后直接用浏览器打开（字体来自 Google Fonts，需要联网）。
 
