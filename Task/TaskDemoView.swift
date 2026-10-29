@@ -9,8 +9,15 @@ struct TaskDemoView<Model: TaskDemoModel>: View {
     let title: String
     let summary: String
     @State var model: Model
-    /// Starts one request on `model`.
-    let load: (Model) -> Void
+    /// Starts one request on `model` and returns its result once it is loaded.
+    /// Returns `nil` for fire-and-forget models whose result only shows up in `model.state`.
+    /// Throws `CancellationError` when a newer request replaced this one.
+    let load: (Model) async throws -> FetchResult?
+
+    /// Callers still awaiting `load`.
+    @State private var awaitingCount = 0
+    /// What the last caller that was not replaced got back from `load`.
+    @State private var callerOutcome: CallerOutcome?
 
     var body: some View {
         NavigationStack {
@@ -23,6 +30,12 @@ struct TaskDemoView<Model: TaskDemoModel>: View {
 
                 Section("Result") {
                     result
+                }
+
+                if awaitingCount > 0 || callerOutcome != nil {
+                    Section("Returned to caller") {
+                        caller
+                    }
                 }
 
                 Section {
@@ -49,17 +62,53 @@ struct TaskDemoView<Model: TaskDemoModel>: View {
 
     private var controls: some View {
         HStack {
-            Button("Fetch", systemImage: "arrow.down.circle") {
-                load(model)
-            }
+            Button("Fetch", systemImage: "arrow.down.circle", action: startLoad)
             Spacer()
             Button("Fetch ×5", systemImage: "bolt") {
-                for _ in 0..<5 { load(model) }
+                for _ in 0..<5 { startLoad() }
             }
             Spacer()
             Button("Cancel", systemImage: "xmark.circle", role: .destructive, action: model.cancel)
         }
         .buttonStyle(.borderless)
+    }
+
+    /// Awaits `load` like any caller would, then shows what it returned.
+    private func startLoad() {
+        awaitingCount += 1
+        Task {
+            defer { awaitingCount -= 1 }
+            do {
+                if let value = try await load(model) {
+                    callerOutcome = .loaded(value)
+                }
+            } catch is CancellationError {
+                // Replaced by a newer request, or cancelled: the newer caller reports its own outcome.
+            } catch {
+                callerOutcome = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var caller: some View {
+        if awaitingCount > 0 {
+            HStack {
+                ProgressView()
+                Text("Awaiting load()… (\(awaitingCount) \(awaitingCount == 1 ? "caller" : "callers"))")
+            }
+        } else {
+            switch callerOutcome {
+            case .loaded(let value):
+                Label("Loaded · HTTP \(value.statusCode) · \(value.widgets.count) widgets", systemImage: "checkmark.circle")
+                    .foregroundStyle(.green)
+            case .failed(let message):
+                Label("Failed: \(message)", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+            case nil:
+                EmptyView()
+            }
+        }
     }
 
     @ViewBuilder
@@ -97,4 +146,9 @@ struct TaskDemoView<Model: TaskDemoModel>: View {
                 .foregroundStyle(.red)
         }
     }
+}
+
+private enum CallerOutcome {
+    case loaded(FetchResult)
+    case failed(String)
 }

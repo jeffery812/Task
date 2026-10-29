@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task 用法手册 · Swift Concurrency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0e0b;
+    --bg-2: #15170f;
+    --line: #2a2d22;
+    --ink: #ece8d9;
+    --ink-soft: #9a9785;
+    --main: #ffb31a;        /* MainActor rail */
+    --main-dim: rgba(255,179,26,.12);
+    --conc: #3fd9c4;        /* concurrent executor rail */
+    --conc-dim: rgba(63,217,196,.12);
+    --cut: #ff5a4e;
+    --sans: "Noto Sans SC", "PingFang SC", sans-serif;
+    --display: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16.5px/1.85 var(--sans); -webkit-font-smoothing: antialiased;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-attachment: fixed;
+  }
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse at 20% 0%, transparent 0, var(--bg) 70%);
+    z-index: -1;
+  }
+  body > * { position: relative; }
+  .veil { position: fixed; inset: 0; background: radial-gradient(ellipse 120% 80% at 30% 10%, rgba(13,14,11,.55), rgba(13,14,11,.94) 60%); pointer-events: none; z-index: 0; }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 32px; position: relative; z-index: 1; }
+  a { color: var(--main); text-underline-offset: 3px; }
+  code { font-family: var(--mono); font-size: .86em; color: var(--main); background: var(--main-dim); padding: .06em .38em; border-radius: 4px; }
+  code.c { color: var(--conc); background: var(--conc-dim); }
+
+  /* ── top bar ───────────────────────────── */
+  .bar { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--line); font: 12px var(--mono); color: var(--ink-soft); letter-spacing: .08em; }
+  .bar nav a { color: var(--ink-soft); text-decoration: none; margin-left: 22px; }
+  .bar nav a:hover { color: var(--main); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--main); margin-right: 10px; box-shadow: 0 0 12px var(--main); animation: blink 2.4s infinite; }
+  @keyframes blink { 50% { opacity: .35; } }
+
+  /* ── hero ──────────────────────────────── */
+  .hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; padding: 80px 0 72px; align-items: center; }
+  .hero h1 { font: 800 clamp(56px, 8.4vw, 112px)/.9 var(--display); letter-spacing: -.045em; margin: 0; }
+  .hero h1 .br { color: var(--ink-soft); font-weight: 300; }
+  .hero h1 .at { color: var(--conc); font-weight: 600; font-size: .52em; letter-spacing: -.02em; display: block; margin: .18em 0 .1em; }
+  .hero .zh { font: 900 26px/1.45 var(--sans); margin: 26px 0 10px; }
+  .hero .lede { color: var(--ink-soft); margin: 0; }
+
+  .rig { border: 1px solid var(--line); background: var(--bg-2); border-radius: 14px; padding: 22px; box-shadow: 0 30px 80px -30px #000; }
+  .rig .code { font: 15px/1.7 var(--mono); padding: 14px 16px; background: #0a0b08; border-radius: 8px; border: 1px solid var(--line); }
+  .rig .code .kw { color: #c9a6ff; } .rig .code .cm { color: #6d6b5d; }
+  .rig .code .attr { color: var(--conc); display: inline-block; overflow: hidden; vertical-align: bottom; max-width: 0; transition: max-width .45s cubic-bezier(.6,0,.2,1); white-space: nowrap; }
+  .rig.on .code .attr { max-width: 9em; }
+  .rails { position: relative; margin-top: 18px; height: 152px; }
+  .rail { position: absolute; left: 0; right: 0; height: 64px; border-radius: 10px; border: 1px dashed; display: flex; align-items: center; padding: 0 16px; font: 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  .rail.m { top: 0; border-color: rgba(255,179,26,.45); color: var(--main); background: var(--main-dim); }
+  .rail.c { bottom: 0; border-color: rgba(63,217,196,.45); color: var(--conc); background: var(--conc-dim); }
+  .chip {
+    position: absolute; right: 16px; top: 13px; height: 38px; padding: 0 16px; border-radius: 8px;
+    display: flex; align-items: center; gap: 8px; font: 600 13px var(--mono); color: #111;
+    background: var(--main); box-shadow: 0 0 24px rgba(255,179,26,.5);
+    transition: transform .6s cubic-bezier(.6,-0.3,.25,1.3), background .4s, box-shadow .4s;
+  }
+  .rig.on .chip { transform: translateY(88px); background: var(--conc); box-shadow: 0 0 24px rgba(63,217,196,.5); }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #111; animation: blink 1s infinite; }
+  .toggle { margin-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .toggle p { margin: 0; font-size: 14px; color: var(--ink-soft); min-height: 3.4em; }
+  .toggle button {
+    flex: none; cursor: pointer; font: 600 13px var(--mono); color: var(--ink); background: transparent;
+    border: 1px solid var(--ink-soft); border-radius: 99px; padding: 10px 18px; transition: .2s;
+  }
+  .toggle button:hover { border-color: var(--conc); color: var(--conc); }
+
+  /* ── sections ──────────────────────────── */
+  section { padding: 64px 0 20px; border-top: 1px solid var(--line); }
+  .sh { display: flex; align-items: baseline; gap: 20px; margin-bottom: 30px; }
+  .sh .no { font: 500 13px var(--mono); color: var(--main); border: 1px solid var(--main); border-radius: 99px; padding: 3px 10px; flex: none; }
+  .sh h2 { font: 800 clamp(30px, 3.6vw, 44px)/1.1 var(--display); letter-spacing: -.02em; margin: 0; }
+  .sh h2 small { display: block; font: 400 16px/1.6 var(--sans); color: var(--ink-soft); letter-spacing: 0; margin-top: 8px; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 26px 26px 22px; }
+  .card.m { border-top: 3px solid var(--main); }
+  .card.c { border-top: 3px solid var(--conc); }
+  .card h3 { font: 700 22px/1.3 var(--display); margin: 0 0 12px; }
+  .card ul { margin: 0; padding-left: 1.1em; }
+  .card li { margin: 6px 0; }
+  .card li::marker { color: var(--ink-soft); }
+  .pill { display: inline-block; font: 600 11px var(--mono); padding: 2px 8px; border-radius: 99px; margin-right: 6px; letter-spacing: .04em; }
+  .pill.y { background: rgba(255,179,26,.18); color: var(--main); }
+  .pill.n { background: rgba(255,90,78,.16); color: var(--cut); }
+
+  pre {
+    margin: 16px 0 0; background: #0a0b08; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px;
+    font: 13.5px/1.75 var(--mono); overflow-x: auto; color: #d8d4c3;
+  }
+  pre .kw { color: #c9a6ff; } pre .cm { color: #6d6b5d; font-style: italic; } pre .s { color: #b5d77b; }
+  pre .mn { color: var(--main); } pre .cc { color: var(--conc); }
+
+  .callout { margin-top: 18px; border-left: 3px solid var(--cut); background: rgba(255,90,78,.07); padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 15px; }
+  .callout b { color: var(--cut); }
+
+  /* api table & compare table */
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th { text-align: left; font: 500 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); padding: 0 14px 12px 0; border-bottom: 1px solid var(--ink-soft); }
+  td { padding: 14px 14px 14px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { font: 500 13.5px var(--mono); white-space: nowrap; }
+  .cmp td:first-child { color: var(--ink); }
+  .cmp tr { transition: background .2s; }
+  .cmp tbody tr:hover { background: rgba(255,255,255,.025); }
+  .cell { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .sw.m { background: var(--main); } .sw.c { background: var(--conc); } .sw.x { background: transparent; border: 1px solid var(--ink-soft); } .sw.k { background: var(--cut); }
+
+  /* why concurrent */
+  .why { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .why > div { padding: 24px; background: var(--bg-2); }
+  .why > div + div { border-left: 1px solid var(--line); }
+  .why .k { font: 500 12px var(--mono); color: var(--ink-soft); }
+  .why .v { font: 700 18px/1.5 var(--sans); margin: 6px 0 8px; }
+  .why p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+  /* cancellation */
+  .cancel-flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; counter-reset: s; }
+  .cancel-flow > div { position: relative; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 18px; font-size: 14.5px; counter-increment: s; }
+  .cancel-flow > div::before { content: counter(s, decimal-leading-zero); font: 600 12px var(--mono); color: var(--cut); display: block; margin-bottom: 6px; }
+  .cancel-flow > div:not(:last-child)::after { content: "→"; position: absolute; right: -13px; top: 50%; transform: translateY(-50%); color: var(--cut); font-family: var(--mono); }
+
+  /* pitfalls */
+  .pits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .pit { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 22px; transition: transform .25s, border-color .25s; }
+  .pit:hover { transform: translateY(-4px); border-color: var(--cut); }
+  .pit .n { font: 800 34px/1 var(--display); color: transparent; -webkit-text-stroke: 1px var(--cut); }
+  .pit h3 { font: 700 17px/1.45 var(--sans); margin: 10px 0 8px; }
+  .pit p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+  /* call chain: two-rail diagram */
+  .chain { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .chain .head { padding: 14px 20px; font: 600 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; }
+  .chain .head.m { color: var(--main); background: var(--main-dim); border-right: 1px solid var(--line); }
+  .chain .head.c { color: var(--conc); background: var(--conc-dim); }
+  .step { padding: 14px 20px; min-height: 74px; border-top: 1px solid var(--line); position: relative; }
+  .step.lm { border-right: 1px solid var(--line); }
+  .step .box {
+    display: inline-block; font: 13px/1.5 var(--mono); padding: 8px 12px; border-radius: 8px; border: 1px solid;
+    opacity: 0; transform: translateY(10px); transition: opacity .5s, transform .5s;
+  }
+  .step .box small { display: block; font: 13px/1.5 var(--sans); color: var(--ink-soft); margin-top: 2px; }
+  .step.m .box { border-color: rgba(255,179,26,.55); background: var(--main-dim); }
+  .step.c .box { border-color: rgba(63,217,196,.55); background: var(--conc-dim); }
+  .step.hop .box { border-style: dashed; }
+  .chain.in .step .box { opacity: 1; transform: none; }
+  .chain-legend { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 16px; font: 12px var(--mono); color: var(--ink-soft); }
+  .mantra { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 30px; }
+  .mantra div { padding: 18px 20px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-2); font-size: 15px; }
+  .mantra b { display: block; font: 600 13px var(--mono); margin-bottom: 4px; }
+
+  /* quiz */
+  .score { display: flex; align-items: center; gap: 18px; margin-bottom: 26px; font: 13px var(--mono); color: var(--ink-soft); }
+  .score .meter { flex: 1; height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; }
+  .score .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--main), var(--conc)); transition: width .4s; }
+  .score b { color: var(--ink); font-size: 15px; }
+  .score button { cursor: pointer; font: 600 12px var(--mono); color: var(--ink-soft); background: none; border: 1px solid var(--line); border-radius: 99px; padding: 6px 14px; }
+  .score button:hover { color: var(--main); border-color: var(--main); }
+  .quiz { display: grid; gap: 18px; counter-reset: q; }
+  .q { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; counter-increment: q; transition: border-color .3s; }
+  .q.right { border-color: rgba(63,217,196,.6); }
+  .q.wrong { border-color: rgba(255,90,78,.6); }
+  .q h3 { margin: 0 0 14px; font: 700 17px/1.6 var(--sans); }
+  .q h3::before { content: "Q" counter(q, decimal-leading-zero); font: 600 12px var(--mono); color: var(--main); margin-right: 12px; vertical-align: 2px; }
+  .q pre { margin: 0 0 14px; }
+  .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .opts button {
+    text-align: left; cursor: pointer; font: 15px/1.6 var(--sans); color: var(--ink); background: #0a0b08;
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; display: flex; gap: 10px; transition: border-color .2s, background .2s;
+  }
+  .opts button::before { content: attr(data-k); font: 600 13px/1.75 var(--mono); color: var(--ink-soft); flex: none; }
+  .opts button:hover:not(:disabled) { border-color: var(--main); }
+  .opts button:disabled { cursor: default; }
+  .opts button.ok { border-color: var(--conc); background: var(--conc-dim); }
+  .opts button.ok::before { color: var(--conc); }
+  .opts button.no { border-color: var(--cut); background: rgba(255,90,78,.1); }
+  .opts button.no::before { color: var(--cut); }
+  .q .ex { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); font-size: 15px; color: var(--ink-soft); }
+  .q .ex b { color: var(--ink); }
+  .q.done .ex { display: block; animation: rise .4s both; }
+  .verdict { margin-top: 24px; padding: 20px 24px; border-radius: 12px; border: 1px solid var(--main); background: var(--main-dim); font-size: 16px; display: none; }
+  .verdict.show { display: block; animation: rise .5s both; }
+  @media (max-width: 900px) { .opts { grid-template-columns: 1fr; } }
+
+  /* structured vs unstructured */
+  .scopes { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .scope-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px; padding: 24px 24px 20px; }
+  .scope-card h3 { font: 700 22px/1.3 var(--display); margin: 0 0 4px; }
+  .scope-card .sub { font: 12px var(--mono); color: var(--ink-soft); margin-bottom: 18px; }
+  .stage { position: relative; height: 150px; margin-bottom: 14px; }
+  .fn { position: absolute; top: 0; bottom: 22px; border: 1.5px solid var(--ink-soft); border-radius: 8px; }
+  .fn > span { position: absolute; top: -10px; left: 10px; background: var(--bg-2); padding: 0 6px; font: 12px var(--mono); color: var(--ink); }
+  .fn::after { content: "return"; position: absolute; right: -1px; bottom: -22px; font: 11px var(--mono); color: var(--ink-soft); transform: translateX(50%); }
+  .lane-bar { position: absolute; height: 22px; border-radius: 5px; font: 12px/22px var(--mono); padding: 0 8px; color: #111; white-space: nowrap; overflow: hidden;
+    transform-origin: left; transform: scaleX(0); transition: transform .9s cubic-bezier(.3,.7,.2,1); }
+  .stage.in .lane-bar { transform: scaleX(1); }
+  .lane-bar.child { background: var(--main); }
+  .lane-bar.free { background: var(--conc); }
+  .lane-bar.free::after { content: "→"; position: absolute; right: 6px; }
+  .cancel-arrow { position: absolute; font: 11px var(--mono); color: var(--cut); white-space: nowrap; opacity: 0; transition: opacity .4s 1s; }
+  .stage.in .cancel-arrow { opacity: 1; }
+  .scope-card ul { margin: 0; padding-left: 1.1em; font-size: 15px; }
+  .scope-card li { margin: 5px 0; }
+  .yes { color: var(--conc); } .nope { color: var(--cut); }
+  @media (max-width: 900px) { .scopes { grid-template-columns: 1fr; } }
+
+  footer { margin-top: 80px; padding: 22px 0 50px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--ink-soft); }
+
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .7s, transform .7s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  .hero > * { animation: rise .9s cubic-bezier(.2,.7,.2,1) both; }
+  .hero > *:nth-child(2) { animation-delay: .15s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(24px); } }
+
+  @media (max-width: 900px) {
+    .hero, .cols, .why, .pits, .mantra { grid-template-columns: 1fr; }
+    .why > div + div { border-left: 0; border-top: 1px solid var(--line); }
+    .cancel-flow { grid-template-columns: 1fr 1fr; }
+    .cancel-flow > div::after { display: none; }
+    .bar nav { display: none; }
+    table { font-size: 14px; }
+    .tw { overflow-x: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal, .step .box { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="veil"></div>
+<div class="wrap">
+
+  <div class="bar">
+    <span><span class="dot"></span>TASK / FIELD GUIDE · Swift 6.2</span>
+    <nav>
+      <a href="#structured">结构化</a><a href="#task">Task {}</a><a href="#concurrent">@concurrent</a><a href="#compare">对比</a><a href="#cancel">取消</a><a href="#timing">启动与等待</a><a href="#pitfalls">坑</a><a href="#chain">调用链</a><a href="#quiz">自测</a><a href="README.html">README ↗</a>
+    </nav>
+  </div>
+
+  <header class="hero">
+    <div>
+      <h1>Task <span class="br">{</span><span class="at">@concurrent in</span><span class="br">}</span></h1>
+      <p class="zh">关键不是“开了一个 Task”，<br>而是“这段代码跑在哪条线上”。</p>
+      <p class="lede"><code>Task</code> 用来从当前上下文开启一段新的异步工作；<code class="c">Task { @concurrent in … }</code> 是 Swift 6.2 的写法，明确告诉编译器：这段工作不要在当前 actor 上跑，放到后台去。</p>
+    </div>
+
+    <div class="rig" id="rig">
+      <div class="code"><span class="kw">Task</span> { <span class="attr">@concurrent </span><span class="kw">in</span><br>&nbsp;&nbsp;&nbsp;&nbsp;<span class="kw">try await</span> work()<br>}&nbsp;&nbsp;<span class="cm">// 在 MainActor 上下文中创建</span></div>
+      <div class="rails">
+        <div class="rail m">MainActor · 主线程</div>
+        <div class="rail c">Global concurrent executor · 后台</div>
+        <div class="chip">work()</div>
+      </div>
+      <div class="toggle">
+        <p id="rig-text">继承调用处的 MainActor：闭包体在主线程执行。同步重活会卡 UI。</p>
+        <button id="rig-btn" type="button">+ @concurrent</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 01 ───────────────────────────── -->
+  <section id="structured" class="reveal">
+    <div class="sh"><span class="no">01</span><h2>结构化 vs 非结构化<small>“非结构化”指的是：这个 Task <strong style="color:var(--ink)">没有父任务</strong>，生命周期不受创建它的那段代码的作用域约束。</small></h2></div>
+
+    <div class="scopes">
+      <div class="scope-card">
+        <h3>结构化</h3>
+        <div class="sub">async let · withTaskGroup · withThrowingTaskGroup</div>
+        <div class="stage">
+          <div class="fn" style="left:0;right:4%"><span>func loadPage() async</span></div>
+          <div class="lane-bar child" style="left:6%;width:52%;top:30px">async let header</div>
+          <div class="lane-bar child" style="left:10%;width:72%;top:64px;transition-delay:.15s">async let widgets</div>
+          <div class="cancel-arrow" style="left:6%;top:98px">父任务取消 → 子任务自动取消</div>
+        </div>
+        <ul>
+          <li><span class="yes">✓</span> 是父任务的<strong>子任务</strong>，不会比作用域活得更久</li>
+          <li><span class="yes">✓</span> 父任务取消，<strong>自动</strong>传给所有子任务</li>
+          <li><span class="yes">✓</span> 子任务的错误自动传给父任务</li>
+          <li><span class="nope">✕</span> 只能在 async 上下文里创建，外部拿不到、也不能单独取消</li>
+        </ul>
+      </div>
+
+      <div class="scope-card">
+        <h3>非结构化</h3>
+        <div class="sub">Task { } · Task.detached { }</div>
+        <div class="stage">
+          <div class="fn" style="left:0;right:58%"><span>func load()</span></div>
+          <div class="lane-bar free" style="left:8%;width:90%;top:30px">currentTask = Task { … }</div>
+          <div class="cancel-arrow" style="left:8%;top:64px">load() 已经返回，Task 还在跑</div>
+          <div class="cancel-arrow" style="left:8%;top:84px;color:var(--ink-soft)">外层取消 ✕ 不会传进来</div>
+        </div>
+        <ul>
+          <li><span class="yes">✓</span> 可以从<strong>同步代码</strong>创建（按钮回调）</li>
+          <li><span class="yes">✓</span> 拿着句柄，可以<strong>从外部</strong>随时 <code>cancel()</code></li>
+          <li><span class="nope">✕</span> 生命周期独立，取消不会自动传入</li>
+          <li><span class="nope">✕</span> 句柄要自己保存、自己清空；错误要 <code>await task.value</code> 才拿到</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cols" style="margin-top:24px">
+      <div class="card m">
+        <h3>结构化写法</h3>
+<pre><span class="kw">func</span> loadPage() <span class="kw">async throws</span> -&gt; Page {
+    <span class="kw">async let</span> header = fetchHeader()    <span class="cm">// 子任务</span>
+    <span class="kw">async let</span> widgets = fetchWidgets()  <span class="cm">// 子任务</span>
+    <span class="kw">return try await</span> Page(header: header, widgets: widgets)
+}   <span class="cm">// ← 返回前，两个子任务一定已经结束</span></pre>
+        <p style="margin:12px 0 0;color:var(--ink-soft);font-size:14.5px">名字借自“结构化编程”：代码的缩进结构就是任务的层级结构，没有东西能从作用域里溜出去。没被 <code>await</code> 的子任务会在离开作用域时被取消并等待结束。</p>
+      </div>
+      <div class="card c">
+        <h3>非结构化写法</h3>
+<pre><span class="kw">func</span> load() {
+    currentTask = <span class="mn">Task</span> {          <span class="cm">// 没有父任务</span>
+        <span class="kw">try await</span> fetch()
+    }
+}   <span class="cm">// ← load() 已经返回，Task 还在跑</span></pre>
+        <p style="margin:12px 0 0;color:var(--ink-soft);font-size:14.5px"><code>Task { }</code> 仍继承 actor 隔离、优先级和 task-local 值，这些不需要父子关系，它只是<strong style="color:var(--ink)">不是子任务</strong>。<code>Task.detached</code> 连这些都不继承。</p>
+      </div>
+    </div>
+
+    <div class="tw" style="margin-top:28px"><table class="cmp">
+      <thead><tr><th></th><th>结构化（async let、task group）</th><th>非结构化（Task {}、Task.detached）</th></tr></thead>
+      <tbody>
+        <tr><td>父子关系</td><td>是父任务的子任务</td><td>没有父任务</td></tr>
+        <tr><td>生命周期</td><td>不超出作用域</td><td>独立，可以比创建者活得更久</td></tr>
+        <tr><td>取消</td><td><span class="cell"><span class="sw k"></span>自动从父任务传给子任务</span></td><td><span class="cell"><span class="sw x"></span>不传，要手动 cancel() 或转发</span></td></tr>
+        <tr><td>错误</td><td>自动传给父任务</td><td>存在句柄里，await task.value 时才抛出</td></tr>
+        <tr><td>从同步代码创建</td><td>不能</td><td><strong>可以</strong>，这是它最主要的用途</td></tr>
+        <tr><td>从外部取消</td><td>不能单独取消某个子任务</td><td>可以，拿着句柄随时 cancel()</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="why" style="margin-top:28px">
+      <div><div class="k">默认</div><div class="v">用结构化</div><p>已经在 async 函数里、要并发做几件事再汇总时，用 <code>async let</code> 或 task group，取消和错误都自动处理。</p></div>
+      <div><div class="k">只有两种情况</div><div class="v">用非结构化</div><p>要从同步代码启动异步工作；或任务需要比当前作用域活得更久、需要从外部取消。</p></div>
+      <div><div class="k">SwiftUI</div><div class="v">优先用 .task { }</div><p>由 SwiftUI 创建并绑定 View 生命周期，消失时自动取消，不用自己管理句柄。</p></div>
+    </div>
+
+    <div class="callout" style="border-color:var(--main);background:var(--main-dim)"><b style="color:var(--main)">本项目为什么用非结构化：</b>① 按钮回调是同步的，<code>startLoad()</code> 只能写 <code>Task { try await load(model) }</code>；② “只保留最新请求”要求新的 <code>load()</code> 能取消旧请求，需要能保存下来的句柄 <code>currentTask</code>，结构化子任务做不到。代价就是后面几节讲的：自己保存和清空句柄、用 <code>withTaskCancellationHandler</code> 转发取消、用 <code>[weak self]</code>。</div>
+  </section>
+
+  <!-- 02 ───────────────────────────── -->
+  <section id="task" class="reveal">
+    <div class="sh"><span class="no">02</span><h2>Task { } · 非结构化任务<small>从同步代码（比如按钮回调）进入 async 世界最常用的入口。</small></h2></div>
+
+    <div class="cols">
+      <div class="card m">
+        <h3>从创建处继承什么</h3>
+        <ul>
+          <li><span class="pill y">继承</span><strong>actor 隔离</strong>：在 MainActor 里创建，闭包体就在主线程执行</li>
+          <li><span class="pill y">继承</span><strong>优先级</strong></li>
+          <li><span class="pill y">继承</span><strong>task-local 值</strong></li>
+          <li><span class="pill n">不继承</span><strong>取消</strong>：外层被取消，它不会跟着取消，生命周期独立</li>
+        </ul>
+<pre><span class="kw">let</span> task = <span class="mn">Task</span> {
+    <span class="kw">try await</span> something()
+}</pre>
+      </div>
+      <div class="card">
+        <h3>句柄 <code>Task&lt;Success, Failure&gt;</code></h3>
+        <div class="tw"><table>
+          <thead><tr><th>API</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td>try await task.value</td><td>等结果。外层被取消时，<strong>不会</strong>传给 <code>task</code></td></tr>
+            <tr><td>await task.result</td><td>等结果，不抛错，返回 <code>Result</code></td></tr>
+            <tr><td>task.cancel()</td><td>请求取消（协作式）</td></tr>
+            <tr><td>task.isCancelled</td><td>是否已被请求取消</td></tr>
+            <tr><td>== / Hashable</td><td>判断两个句柄是不是同一个任务</td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="callout"><b>注意：</b>在 MainActor 上下文里写 <code>Task { }</code>，<strong>不等于“放到后台”</strong>。闭包里有同步耗时代码，照样卡主线程。</div>
+
+    <div class="cols" style="margin-top:24px">
+      <div class="card">
+        <h3>本项目 · <code>TaskDemoView.startLoad()</code></h3>
+        <p style="margin:0;color:var(--ink-soft)">在 View（MainActor）里创建 Task，闭包在主线程执行；到 <code>await load(model)</code> 时挂起，不阻塞页面。</p>
+      </div>
+      <div class="card">
+        <h3>本项目 · <code>LandingPageViewModel.load()</code></h3>
+        <p style="margin:0;color:var(--ink-soft)"><code>currentTask = Task { [weak self, fetch] in … }</code> 也在主线程上；耗时工作在 <code class="c">LandingPageService.fetch()</code> 里，它自己标了 <code class="c">@concurrent</code>，会切到后台。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 ───────────────────────────── -->
+  <section id="concurrent" class="reveal">
+    <div class="sh"><span class="no">03</span><h2>Task { @concurrent in } · 明确放到后台<small>只改变“在哪执行”，其他照常继承。</small></h2></div>
+
+    <div class="cols">
+      <div class="card c">
+        <h3>特性</h3>
+        <ul>
+          <li>闭包是 <code class="c">nonisolated</code> 的，运行在<strong>全局并发执行器</strong>（后台线程池），不继承调用处的 actor</li>
+          <li>优先级、task-local 值<strong>仍然继承</strong>，这是它和 <code>Task.detached</code> 的区别</li>
+          <li>跨隔离域：捕获的值必须是 <code>Sendable</code>（本项目 <code>fetch</code> 是 <code>@Sendable</code> 闭包，<code>self</code> 用 <code>weak</code> 捕获）</li>
+          <li>访问 MainActor 上的东西（<code>self.append</code>、<code>self.state</code>）必须 <code>await</code>，跳回主线程</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>本项目 · Serial / Async Latest</h3>
+<pre><span class="kw">let</span> task = <span class="cc">Task</span> { <span class="cc">@concurrent</span> [<span class="kw">weak</span> self, fetch] <span class="kw">in</span>
+    <span class="kw">let</span> onMain = isOnMainThread()      <span class="cm">// false</span>
+    <span class="kw">await</span> self?.<span class="mn">append</span>(<span class="s">"running, main thread: \(onMain)"</span>)
+    <span class="kw">return try await</span> fetch()
+}</pre>
+        <p style="margin:12px 0 0;color:var(--ink-soft);font-size:14.5px">日志里的 <code>main thread: false</code> 就来自这里。</p>
+      </div>
+    </div>
+
+    <h3 style="font:700 20px var(--display);margin:40px 0 14px">为什么需要 <code class="c">@concurrent</code></h3>
+    <div class="why">
+      <div><div class="k">SWIFT_APPROACHABLE_CONCURRENCY = YES</div><div class="v">nonisolated async 默认跟着调用者走</div><p>这类函数默认是 <code>nonisolated(nonsending)</code>，主线程调用它，它就在主线程跑。</p></div>
+      <div><div class="k">SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor</div><div class="v">没标注的代码都在主线程</div><p>app target 默认隔离为 MainActor，ViewModel、View 都在主线程上。</p></div>
+      <div><div class="k">所以</div><div class="v">离开主线程要写出来</div><p>在函数上加 <code class="c">@concurrent</code>（如 <code>fetch()</code>），或在 Task 闭包上加 <code class="c">@concurrent</code>。</p></div>
+    </div>
+  </section>
+
+  <!-- 04 ───────────────────────────── -->
+  <section id="compare" class="reveal">
+    <div class="sh"><span class="no">04</span><h2>几种写法对比</h2></div>
+    <div class="tw"><table class="cmp">
+      <thead><tr><th>写法</th><th>actor 隔离</th><th>优先级 / task-local</th><th>取消</th><th>适用场景</th></tr></thead>
+      <tbody>
+        <tr><td>Task { }</td><td><span class="cell"><span class="sw m"></span>继承</span></td><td>继承</td><td><span class="cell"><span class="sw x"></span>独立</span></td><td>从同步代码进入 async 世界，并留在当前 actor 上</td></tr>
+        <tr><td>Task { @MainActor in }</td><td><span class="cell"><span class="sw m"></span>明确 MainActor</span></td><td>继承</td><td><span class="cell"><span class="sw x"></span>独立</span></td><td>从后台回到主线程更新 UI</td></tr>
+        <tr><td>Task { @concurrent in }</td><td><span class="cell"><span class="sw c"></span>不继承，后台执行</span></td><td>继承</td><td><span class="cell"><span class="sw x"></span>独立</span></td><td>把耗时工作移出当前 actor</td></tr>
+        <tr><td>Task.detached { }</td><td><span class="cell"><span class="sw c"></span>不继承</span></td><td><strong>都不继承</strong></td><td><span class="cell"><span class="sw x"></span>独立</span></td><td>极少需要，确实要完全脱离上下文时才用</td></tr>
+        <tr><td>async let / withTaskGroup</td><td>结构化</td><td>继承</td><td><span class="cell"><span class="sw k"></span>随父任务取消</span></td><td>并发执行几件事，然后等它们都完成</td></tr>
+        <tr><td>SwiftUI .task { }</td><td><span class="cell"><span class="sw m"></span>MainActor</span></td><td>继承</td><td><span class="cell"><span class="sw k"></span>View 消失时自动取消</span></td><td>和 View 生命周期绑定的加载</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout" style="border-color:var(--conc);background:var(--conc-dim)">测试里的 <code>uncancellableSleep</code> 用了 <code>Task.detached</code>：让 sleep 不受测试 Task 的取消影响，也不占用 MainActor，用来模拟“取消后还要继续跑一会儿”的工作。</div>
+  </section>
+
+  <!-- 05 ───────────────────────────── -->
+  <section id="cancel" class="reveal">
+    <div class="sh"><span class="no">05</span><h2>取消是协作式的<small><code>task.cancel()</code> 只是设置一个标记，不会强行停止代码。</small></h2></div>
+    <div class="cancel-flow">
+      <div><code>task.cancel()</code><br>设置取消标记</div>
+      <div>任务继续运行，直到碰到支持取消的点</div>
+      <div><code>Task.sleep</code> 抛 <code>CancellationError</code><br><code>URLSession</code> 抛 <code>URLError(.cancelled)</code></div>
+      <div>CPU 密集代码自己检查：<br><code>try Task.checkCancellation()</code><br><code>Task.isCancelled</code></div>
+    </div>
+    <div class="cols" style="margin-top:24px">
+      <div class="card">
+        <h3>非结构化 Task 要手动转发取消</h3>
+<pre><span class="kw">try await</span> withTaskCancellationHandler {
+    <span class="kw">try await</span> task.value
+} onCancel: {
+    task.cancel()   <span class="cm">// 调用方被取消时，转发给内部 task</span>
+}</pre>
+      </div>
+      <div class="card">
+        <h3><code>onCancel</code> 在哪执行？</h3>
+        <p style="margin:0;color:var(--ink-soft)">在<strong style="color:var(--ink)">发起取消的那个线程</strong>上立即同步执行，不需要等 <code>load()</code> 恢复。<code>Task.cancel()</code> 是线程安全的，所以从任何线程调用都没问题。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 06 ───────────────────────────── -->
+  <section id="timing" class="reveal">
+    <div class="sh"><span class="no">06</span><h2>启动时机与等待结果<small>Task 什么时候开始跑？等结果一定要 <code>withTaskCancellationHandler</code> 吗？</small></h2></div>
+
+    <div class="cols">
+      <div class="card c">
+        <h3>会立即执行吗？</h3>
+        <ul>
+          <li><span class="pill y">是</span>创建时就提交到全局并发执行器，<strong>不需要</strong>有人 <code>await task.value</code> 才开始</li>
+          <li><span class="pill n">否</span>不是同步执行：<code>Task { }</code> 提交后马上返回句柄，<code>load()</code> 接着往下跑，两边并行</li>
+          <li>丢掉句柄不会取消任务，只是再也无法取消它、拿不到它的结果</li>
+          <li>想在当前线程上同步跑到第一个挂起点，用 Swift 6.2 的 <code>Task.immediate { }</code>，这和 <code class="c">@concurrent</code> 的目的相反</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>日志顺序：为什么 <code>running</code> 总在 <code>started</code> 之后</h3>
+<pre><span class="cm">// 主线程：load()</span>
+append(<span class="s">"#n started"</span>)
+<span class="kw">let</span> task = <span class="cc">Task</span> { <span class="cc">@concurrent</span> … }  <span class="cm">// 后台立即开始</span>
+currentTask = task
+<span class="kw">try await</span> task.value          <span class="cm">// ← 主线程在这里才空出来</span>
+
+<span class="cm">// 后台：闭包</span>
+isOnMainThread()              <span class="cm">// 马上执行</span>
+<span class="kw">await</span> self?.<span class="mn">append</span>(<span class="s">"#n running"</span>) <span class="cm">// 等主线程空出来</span></pre>
+      </div>
+    </div>
+
+    <h3 style="font:700 20px var(--display);margin:40px 0 6px">等结果：<code>try await task.value</code> 就够了</h3>
+    <p style="margin:0 0 18px;color:var(--ink-soft)"><code>withTaskCancellationHandler</code> 只解决一件事：<strong style="color:var(--ink)">把调用方的取消转发给非结构化 task</strong>，因为 <code>task.value</code> 本身不转发。</p>
+
+    <div class="tw"><table class="cmp">
+      <thead><tr><th>调用方被取消时</th><th>加了 handler</th><th>不加</th></tr></thead>
+      <tbody>
+        <tr><td>内部 task</td><td><code>onCancel</code> 立即 <code>task.cancel()</code>，<code>fetch()</code> 在 sleep / URLSession 处抛错</td><td>完全不知道，继续 sleep 2 秒、发请求、解析</td></tr>
+        <tr><td>load()</td><td>很快恢复，抛 <code>CancellationError</code>，状态回到 <code>.idle</code></td><td>等 <code>fetch()</code> 全部完成才恢复，<strong>照常写 <code>.loaded</code> 并返回值</strong></td></tr>
+        <tr><td>结果</td><td><span class="cell"><span class="sw c"></span>白做的工作被及时停掉</span></td><td><span class="cell"><span class="sw k"></span>浪费网络和 CPU，已取消的调用方还会更新状态</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="cols" style="margin-top:28px">
+      <div class="card">
+        <h3>两条取消路径，只有一条需要 handler</h3>
+        <ul>
+          <li><strong>被更新的 load() 替换</strong>：新调用手里有句柄，直接 <code>currentTask?.cancel()</code>。<span class="pill y">不需要</span></li>
+          <li><strong>调用方自己被取消</strong>：取消只到达外层任务，要靠 <code>onCancel</code> 传进去。<span class="pill n">需要</span></li>
+        </ul>
+        <p style="margin:12px 0 0;color:var(--ink-soft);font-size:14.5px">当前 App 里 <code>startLoad()</code> 的 Task 没人取消，第二条路径暂时不会触发；测试 <code>cancellingCallerCancelsAsyncLatestRequest</code> 依赖它。改成 <code>.task { }</code> 调用后就会真正起作用。</p>
+      </div>
+      <div class="card">
+        <h3>为什么不直接 <code>try await fetch()</code>？</h3>
+        <p style="margin:0;color:var(--ink-soft)">直接调用是结构化的，调用方的取消会<strong style="color:var(--ink)">自动</strong>传进去，不需要 handler。但这样就没有句柄，更新的 <code>load()</code> 无法取消旧请求。</p>
+        <p style="margin:12px 0 0;color:var(--ink-soft)">“只保留最新请求”需要能从外部取消的句柄 → 内部 <code>Task</code>；一旦用了非结构化 Task → 需要 handler 补上取消转发。<strong style="color:var(--ink)">两者是配套的。</strong></p>
+      </div>
+    </div>
+
+    <div class="callout" style="border-color:var(--conc);background:var(--conc-dim)">如果调用方在进入 <code>withTaskCancellationHandler</code> <strong>之前</strong>就已被取消，<code>onCancel</code> 会在进入时立即执行一次，不会漏掉。</div>
+  </section>
+
+  <!-- 07 ───────────────────────────── -->
+  <section id="pitfalls" class="reveal">
+    <div class="sh"><span class="no">07</span><h2>常见坑</h2></div>
+    <div class="pits">
+      <div class="pit"><div class="n">01</div><h3>以为 Task { } 在后台跑</h3><p>在 MainActor 上下文里，它仍然在主线程上。需要后台执行时要用 <code class="c">@concurrent</code>。</p></div>
+      <div class="pit"><div class="n">02</div><h3>Task 会强引用捕获的对象</h3><p>执行完之前，捕获的 <code>self</code> 不会被释放。不需要它延长对象生命周期时，用 <code>[weak self]</code>。</p></div>
+      <div class="pit"><div class="n">03</div><h3>忘了保存句柄</h3><p>不保存就无法取消它，也无法知道“当前请求是哪个”。本项目用 <code>currentTask</code> 保存。</p></div>
+      <div class="pit"><div class="n">04</div><h3>完成后句柄不会自动清空</h3><p>需要自己在合适时机把 <code>currentTask</code> 设为 <code>nil</code>（见 <code>finish(...)</code>）。</p></div>
+      <div class="pit"><div class="n">05</div><h3>await 之后状态可能已变</h3><p>重入问题：恢复后要重新检查，比如 <code>guard !task.isCancelled</code>，再决定是否写 <code>state</code>。</p></div>
+      <div class="pit"><div class="n">06</div><h3>能用结构化并发就别用 Task { }</h3><p>SwiftUI 里和页面生命周期绑定的加载优先用 <code>.task { }</code>，View 消失时会自动取消。</p></div>
+    </div>
+  </section>
+
+  <!-- 08 ───────────────────────────── -->
+  <section id="chain">
+    <div class="sh reveal"><span class="no">08</span><h2>本项目里的一次 Fetch<small>每一步落在哪条线上。虚线框表示跨线程跳转。</small></h2></div>
+
+    <div class="chain" id="chain-grid">
+      <div class="head m">MainActor · 主线程</div>
+      <div class="head c">Concurrent executor · 后台</div>
+
+      <div class="step lm m"><span class="box">按钮回调 startLoad()<small>同步，主线程</small></span></div><div class="step"></div>
+      <div class="step lm m"><span class="box">Task { }<small>继承 MainActor</small></span></div><div class="step"></div>
+      <div class="step lm m"><span class="box">await model.load()<small>改 state、写日志，然后在 await 处挂起</small></span></div><div class="step"></div>
+      <div class="step lm"></div><div class="step c"><span class="box">Task { @concurrent in }<small>后台线程</small></span></div>
+      <div class="step lm m hop"><span class="box">await self?.append(…)<small>跳回主线程写日志</small></span></div><div class="step"></div>
+      <div class="step lm"></div><div class="step c"><span class="box">await fetch()<small>@concurrent：sleep → URLSession → 解析 JSON</small></span></div>
+      <div class="step lm m hop"><span class="box">load() 恢复<small>guard !task.isCancelled → state = .loaded → return</small></span></div><div class="step"></div>
+      <div class="step lm m"><span class="box">callerOutcome = .loaded<small>页面显示 “Loaded”</small></span></div><div class="step"></div>
+    </div>
+
+    <div class="mantra reveal">
+      <div><b style="color:var(--main)">最外层 Task {}</b>让同步的按钮回调能调用 async 代码。</div>
+      <div><b style="color:var(--main)">load()</b>在主线程上管理状态，不需要锁。</div>
+      <div><b style="color:var(--conc)">Task { @concurrent }</b>把重活放到后台。</div>
+    </div>
+  </section>
+
+  <!-- 09 ───────────────────────────── -->
+  <section id="quiz">
+    <div class="sh reveal"><span class="no">09</span><h2>面试自测 · 10 题<small>点选一个答案就会显示对错和解析，每题只能作答一次。</small></h2></div>
+
+    <div class="score"><span>得分 <b id="q-score">0</b> / 10 · 已答 <span id="q-done">0</span></span><span class="meter"><i id="q-meter"></i></span><button type="button" id="q-reset">重新作答</button></div>
+
+    <div class="quiz" id="quiz-list">
+      <div class="q" data-a="B">
+        <h3>在一个 <code>@MainActor</code> 的 SwiftUI View 里写 <code>Task { heavySyncWork() }</code>，<code>heavySyncWork()</code> 在哪里执行？</h3>
+        <div class="opts"><button data-k="A">全局并发线程池，因为 Task 总是在后台跑</button><button data-k="B">主线程，Task 继承了 MainActor 隔离</button><button data-k="C">系统为这个 Task 新建的专用线程</button><button data-k="D">不确定，由调度器随机决定</button></div>
+        <p class="ex"><b>B。</b><code>Task { }</code> 继承创建处的 actor 隔离。在 MainActor 上下文里创建，闭包体就在主线程执行，同步重活会卡 UI。要放到后台得用 <code class="c">@concurrent</code>。</p>
+      </div>
+
+      <div class="q" data-a="C">
+        <h3><code>Task { @concurrent in … }</code> 和 <code>Task.detached { … }</code> 的主要区别是？</h3>
+        <div class="opts"><button data-k="A">前者不继承优先级和 task-local，后者继承</button><button data-k="B">后者会继承调用处的 actor，前者不会</button><button data-k="C">两者都不继承 actor；前者仍继承优先级和 task-local，后者都不继承</button><button data-k="D">没有区别，只是写法不同</button></div>
+        <p class="ex"><b>C。</b>两者都在全局并发执行器上运行。<code class="c">@concurrent</code> 只改变执行位置，优先级和 task-local 值照常继承；<code>Task.detached</code> 什么都不继承，极少需要。</p>
+      </div>
+
+      <div class="q" data-a="A">
+        <h3><code>withTaskCancellationHandler</code> 的 <code>onCancel</code> 闭包在什么时候、在哪里执行？</h3>
+        <div class="opts"><button data-k="A">取消发生时，在发起取消的那个线程上立即同步执行</button><button data-k="B">总是在主线程上执行</button><button data-k="C">等 operation 闭包执行完之后才执行</button><button data-k="D">如果进入前任务已被取消，就永远不会执行</button></div>
+        <p class="ex"><b>A。</b><code>onCancel</code> 在调用 <code>cancel()</code> 的线程上同步执行，不等被取消的代码恢复，所以里面只能做线程安全的事（如 <code>task.cancel()</code>）。如果进入前已被取消，进入时会立即执行一次。</p>
+      </div>
+
+      <div class="q" data-a="B">
+        <h3>调用 <code>task.cancel()</code> 之后会发生什么？</h3>
+        <div class="opts"><button data-k="A">立即终止执行该任务的线程</button><button data-k="B">只设置取消标记，任务要在支持取消的点或自己检查时才停下</button><button data-k="C">在调用 <code>cancel()</code> 的地方抛出 <code>CancellationError</code></button><button data-k="D">把任务从执行器队列中移除，之后不再执行任何代码</button></div>
+        <p class="ex"><b>B。</b>Swift 的取消是协作式的。<code>Task.sleep</code>、<code>URLSession</code> 等会响应取消并抛错；CPU 密集代码需要自己 <code>try Task.checkCancellation()</code> 或检查 <code>Task.isCancelled</code>。</p>
+      </div>
+
+      <div class="q" data-a="D">
+        <h3>下面哪个<strong>不会</strong>自动响应任务取消？</h3>
+        <div class="opts"><button data-k="A"><code>try await Task.sleep(for: .seconds(2))</code></button><button data-k="B"><code>try await URLSession.shared.data(for: request)</code></button><button data-k="C"><code>try Task.checkCancellation()</code></button><button data-k="D">一个遍历 10 万个元素做 JSON 解析的 <code>for</code> 循环</button></div>
+        <p class="ex"><b>D。</b>普通同步循环不知道取消这回事，会一直跑完。A 抛 <code>CancellationError</code>，B 抛 <code>URLError(.cancelled)</code>，C 就是用来检查取消的。本项目 <code>fetch()</code> 在解析前调用了 <code>checkCancellation()</code>。</p>
+      </div>
+
+      <div class="q" data-a="C">
+        <h3>调用方正在 <code>try await task.value</code>（<code>task</code> 是非结构化 Task），此时调用方自己被取消，会怎样？</h3>
+        <div class="opts"><button data-k="A"><code>task</code> 自动被取消</button><button data-k="B"><code>task.value</code> 立即抛出 <code>CancellationError</code></button><button data-k="C"><code>task</code> 不受影响，继续执行；调用方会一直等到它完成</button><button data-k="D">发生死锁</button></div>
+        <p class="ex"><b>C。</b><code>task.value</code> 不会把取消转发给非结构化任务，也不会提前返回。想让 <code>task</code> 跟着停，要用 <code>withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }</code>。</p>
+      </div>
+
+      <div class="q" data-a="A">
+        <h3>下面这段 MainActor 上的代码，最需要注意的问题是什么？</h3>
+<pre><span class="kw">func</span> load() <span class="kw">async throws</span> {
+    state = .loading
+    <span class="kw">let</span> value = <span class="kw">try await</span> task.value
+    state = .loaded(value)
+}</pre>
+        <div class="opts"><button data-k="A">重入：挂起期间别的 <code>load()</code> 可能已改了状态，恢复后要重新检查</button><button data-k="B">死锁：MainActor 上不能 <code>await</code></button><button data-k="C">等待期间主线程被阻塞，页面卡住</button><button data-k="D">写 <code>state</code> 需要加锁</button></div>
+        <p class="ex"><b>A。</b><code>await</code> 会让出主线程，其他调用可以进来。恢复后可能已有更新的请求，直接写 <code>.loaded</code> 会被过期结果覆盖。本项目用 <code>guard !task.isCancelled</code> 挡住。主线程没有被阻塞（C 错），状态只在 MainActor 上读写，所以不需要锁（D 错）。</p>
+      </div>
+
+      <div class="q" data-a="D">
+        <h3>开启 Approachable Concurrency 后，从 MainActor 调用一个 <code>nonisolated func parse() async</code>，它在哪执行？</h3>
+        <div class="opts"><button data-k="A">总是在后台线程池</button><button data-k="B">编译报错，必须加 <code>@concurrent</code></button><button data-k="C">在一个新创建的 Task 中执行</button><button data-k="D">在调用者的 actor 上，也就是主线程</button></div>
+        <p class="ex"><b>D。</b>此时 <code>nonisolated async</code> 函数默认是 <code>nonisolated(nonsending)</code>，跟着调用者走。要让它离开主线程，需要标 <code class="c">@concurrent</code>，就像本项目的 <code>LandingPageService.fetch()</code>。</p>
+      </div>
+
+      <div class="q" data-a="B">
+        <h3>SwiftUI 里，和页面生命周期绑定的数据加载，最推荐哪种写法？</h3>
+        <div class="opts"><button data-k="A"><code>.onAppear { Task { await load() } }</code></button><button data-k="B"><code>.task { await load() }</code></button><button data-k="C">在 View 的 <code>init</code> 里 <code>Task.detached { await load() }</code></button><button data-k="D"><code>DispatchQueue.global().async { … }</code></button></div>
+        <p class="ex"><b>B。</b><code>.task</code> 在 View 出现时启动，消失时<strong>自动取消</strong>。A 创建的非结构化 Task 不会随页面消失而取消，C 脱离了所有上下文，D 不属于 Swift Concurrency，也没有取消机制。</p>
+      </div>
+
+      <div class="q" data-a="C">
+        <h3>为什么在 ViewModel 里常写 <code>Task { [weak self] in … }</code>？</h3>
+        <div class="opts"><button data-k="A">不写 <code>weak</code> 编译器会报错</button><button data-k="B"><code>weak</code> 能让 Task 运行得更快</button><button data-k="C">Task 执行完之前会强引用捕获的对象，<code>weak</code> 避免它延长 ViewModel 的生命周期</button><button data-k="D"><code>weak</code> 可以防止数据竞争</button></div>
+        <p class="ex"><b>C。</b>Task 闭包会持有捕获的值直到执行结束。页面关闭后，如果请求还在跑，强引用会让 ViewModel 多活一段时间并继续更新状态。这不是循环引用（Task 结束后会释放），但通常不是想要的行为。</p>
+      </div>
+    </div>
+
+    <div class="verdict" id="q-verdict"></div>
+  </section>
+
+  <footer>
+    <span>Task.xcodeproj · Swift Concurrency 笔记</span>
+    <a href="README.html">← 返回 README</a>
+  </footer>
+</div>
+
+<script>
+  // Hero toggle: move work() between the MainActor rail and the concurrent rail.
+  const rig = document.getElementById('rig');
+  const btn = document.getElementById('rig-btn');
+  const text = document.getElementById('rig-text');
+  const copy = {
+    off: ['继承调用处的 MainActor：闭包体在主线程执行。同步重活会卡 UI。', '+ @concurrent'],
+    on:  ['闭包 nonisolated，运行在全局并发执行器上；访问 MainActor 的状态需要 await。', '− @concurrent'],
+  };
+  btn.addEventListener('click', () => {
+    const on = rig.classList.toggle('on');
+    [text.textContent, btn.textContent] = copy[on ? 'on' : 'off'];
+  });
+
+  // Reveal on scroll; the call chain steps appear one after another.
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      e.target.classList.add('in');
+      if (e.target.id === 'chain-grid') {
+        e.target.querySelectorAll('.box').forEach((box, i) => box.style.transitionDelay = `${i * 0.18}s`);
+      }
+      io.unobserve(e.target);
+    }
+  }, { threshold: 0.15 });
+  document.querySelectorAll('.reveal, #chain-grid').forEach(el => io.observe(el));
+  const stageIO = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); stageIO.unobserve(e.target); } }), { threshold: 0.5 });
+  document.querySelectorAll('.stage').forEach(el => stageIO.observe(el));
+  // Quiz: answer once per question, then reveal the explanation and update the score.
+  const qs = [...document.querySelectorAll('#quiz-list .q')];
+  const scoreEl = document.getElementById('q-score');
+  const doneEl = document.getElementById('q-done');
+  const meter = document.getElementById('q-meter');
+  const verdict = document.getElementById('q-verdict');
+  function refresh() {
+    const done = qs.filter(q => q.classList.contains('done')).length;
+    const right = qs.filter(q => q.classList.contains('right')).length;
+    scoreEl.textContent = right; doneEl.textContent = done;
+    meter.style.width = `${right / qs.length * 100}%`;
+    if (done === qs.length) {
+      verdict.textContent = right >= 9 ? `${right}/10 · 很扎实，Task 的隔离、取消和重入都掌握了。`
+        : right >= 6 ? `${right}/10 · 基础不错，回看答错题的解析，重点再读一遍 01–06 节。`
+        : `${right}/10 · 建议从头读一遍本页，特别是“取消是协作式的”和“启动时机与等待结果”。`;
+      verdict.classList.add('show');
+    } else {
+      verdict.classList.remove('show');
+    }
+  }
+  qs.forEach(q => q.querySelectorAll('.opts button').forEach(b => b.addEventListener('click', () => {
+    const answer = q.dataset.a;
+    q.querySelectorAll('.opts button').forEach(o => {
+      o.disabled = true;
+      if (o.dataset.k === answer) o.classList.add('ok');
+    });
+    if (b.dataset.k !== answer) b.classList.add('no');
+    q.classList.add('done', b.dataset.k === answer ? 'right' : 'wrong');
+    refresh();
+  })));
+  document.getElementById('q-reset').addEventListener('click', () => {
+    qs.forEach(q => {
+      q.classList.remove('done', 'right', 'wrong');
+      q.querySelectorAll('.opts button').forEach(o => { o.disabled = false; o.classList.remove('ok', 'no'); });
+    });
+    refresh();
+    document.getElementById('quiz').scrollIntoView();
+  });
+</script>
+</body>
+</html>
