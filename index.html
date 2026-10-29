@@ -147,6 +147,20 @@
 
   footer { margin-top: 96px; border-top: 2px solid var(--ink); padding: 18px 0 48px; display: flex; justify-content: space-between; font: 12px var(--mono); color: var(--ink-soft); }
 
+  .guide {
+    display: grid; grid-template-columns: auto auto 1fr auto; align-items: baseline; gap: 22px;
+    margin-top: 28px; padding: 22px 26px; border: 2px solid var(--ink); background: var(--ink); color: var(--paper);
+    text-decoration: none; box-shadow: 8px 8px 0 var(--cut); transition: transform .2s, box-shadow .2s;
+  }
+  .guide:hover { transform: translate(-3px, -3px); box-shadow: 11px 11px 0 var(--cut); }
+  .guide .g-tag { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--cut); }
+  .guide .g-title { font: 900 24px/1.2 var(--serif); }
+  .guide .g-desc { font-size: 15px; color: #c9c2b0; }
+  .guide .g-desc code { background: rgba(255,255,255,.1); color: var(--paper); }
+  .guide .g-arrow { font: 300 32px/1 var(--display); color: var(--cut); transition: transform .2s; }
+  .guide:hover .g-arrow { transform: translateX(6px); }
+  @media (max-width: 860px) { .guide { grid-template-columns: 1fr; gap: 6px; } .guide .g-arrow { display: none; } }
+
   .reveal { opacity: 0; transform: translateY(18px); transition: opacity .8s, transform .8s cubic-bezier(.2,.7,.2,1); }
   .reveal.in { opacity: 1; transform: none; }
 
@@ -167,8 +181,8 @@
 <div class="wrap">
 
   <header class="mast">
-    <span><b>README</b> · Task.xcodeproj</span>
-    <span>SwiftUI · Swift Concurrency · iOS 26</span>
+    <span><b>Task</b> · Task.xcodeproj</span>
+    <span>SwiftUI · Swift Concurrency · iOS 26 · <a href="TaskGuide.html">Task 用法手册 →</a></span>
   </header>
 
   <div class="hero">
@@ -186,6 +200,13 @@
       </div>
     </div>
   </div>
+
+  <a class="guide" href="TaskGuide.html">
+    <span class="g-tag">配套阅读</span>
+    <span class="g-title">Task 用法手册</span>
+    <span class="g-desc">结构化 vs 非结构化、<code>Task { @concurrent }</code>、取消、启动时机、常见坑、本项目调用链，以及 10 道面试自测题。</span>
+    <span class="g-arrow">→</span>
+  </a>
 
   <!-- 01 ─────────────────────────────────── -->
   <section class="reveal">
@@ -434,7 +455,7 @@
 
   <footer>
     <span>Task — Swift Concurrency cancellation demo</span>
-    <span>© 2026 Zhihui Tang</span>
+    <span><a href="TaskGuide.html">Task 用法手册</a> · © 2026 Zhihui Tang</span>
   </footer>
 </div>
 
